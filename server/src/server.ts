@@ -36,7 +36,8 @@ app.use(
         allowedOrigins.includes(origin) ||
         /\.ngrok-free\.app$/.test(origin) ||
         /\.ngrok\.io$/.test(origin) ||
-        /\.trycloudflare\.com$/.test(origin)
+        /\.trycloudflare\.com$/.test(origin) ||
+        /\.vercel\.app$/.test(origin)
       ) {
         callback(null, true);
       } else {
