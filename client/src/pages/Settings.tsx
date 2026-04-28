@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useSearchParams } from "react-router-dom";
 import {
   User,
@@ -24,6 +24,33 @@ const sidebarItems = [
   { icon: MapPin, label: "Location", id: "location" },
 ];
 
+function AvatarDisplay({ name, avatar, size = 72 }: { name: string; avatar?: string; size?: number }) {
+  if (avatar) {
+    return (
+      <img
+        src={avatar}
+        alt={name}
+        style={{ width: size, height: size }}
+        className="rounded-full object-cover"
+      />
+    );
+  }
+  const initials = name
+    .split(" ")
+    .map((n) => n[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase();
+  return (
+    <div
+      style={{ width: size, height: size, fontSize: size * 0.35 }}
+      className="rounded-full bg-brand-dark flex items-center justify-center text-white font-bold shrink-0"
+    >
+      {initials}
+    </div>
+  );
+}
+
 export default function Settings() {
   const { user, logout, updateUser } = useAuth();
   const [searchParams] = useSearchParams();
@@ -39,6 +66,8 @@ export default function Settings() {
     location: user?.location?.address || "",
     bio: user?.bio || "",
   });
+  const [avatarPreview, setAvatarPreview] = useState<string | undefined>(user?.avatar);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [saving, setSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [prefs, setPrefs] = useState({
@@ -66,6 +95,20 @@ export default function Settings() {
   const update = (field: string, value: string) =>
     setForm((f) => ({ ...f, [field]: value }));
 
+  const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 3 * 1024 * 1024) {
+      alert("Image must be under 3 MB.");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      setAvatarPreview(reader.result as string);
+    };
+    reader.readAsDataURL(file);
+  };
+
   const handleSave = async () => {
     setSaving(true);
     setSaveSuccess(false);
@@ -75,6 +118,7 @@ export default function Settings() {
         phone: form.phone,
         bio: form.bio,
         location: { address: form.location, coordinates: [0, 0] },
+        avatar: avatarPreview,
       });
       updateUser(res.data.user || res.data);
       setSaveSuccess(true);
@@ -154,17 +198,38 @@ export default function Settings() {
         <div className="max-w-[700px]">
           {/* Avatar */}
           <div className="flex items-center gap-5 mb-7">
-            <div className="w-[72px] h-[72px] bg-brand-light rounded-full" />
+            <div className="relative">
+              <AvatarDisplay name={form.name || user?.name || ""} avatar={avatarPreview} size={72} />
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                className="absolute -bottom-1 -right-1 w-7 h-7 bg-brand-dark rounded-full flex items-center justify-center border-2 border-white hover:bg-green-800 transition-colors"
+                title="Change photo"
+              >
+                <Camera className="w-3.5 h-3.5 text-white" />
+              </button>
+            </div>
             <div className="flex-1">
               <div className="text-[20px] font-bold text-gray-text">
                 {user?.name}
               </div>
               <div className="text-[13px] text-gray-muted">{user?.email}</div>
             </div>
-            <button className="flex items-center gap-1.5 bg-brand-card-bg text-brand-dark text-[13px] font-semibold px-4 py-2 rounded-[10px] border border-brand-card-border hover:bg-brand-card-border transition-colors">
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              className="flex items-center gap-1.5 bg-brand-card-bg text-brand-dark text-[13px] font-semibold px-4 py-2 rounded-[10px] border border-brand-card-border hover:bg-brand-card-border transition-colors"
+            >
               <Camera className="w-4 h-4" /> Change Photo
             </button>
           </div>
+
+          {/* Hidden file input */}
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/png,image/jpeg,image/webp"
+            className="hidden"
+            onChange={handleAvatarChange}
+          />
 
           <div className="h-px bg-brand-card-border mb-7" />
 
@@ -547,7 +612,7 @@ export default function Settings() {
 
                 {/* Profile card */}
                 <div className="flex items-center gap-3.5 bg-white rounded-xl p-4 border border-brand-card-border">
-                  <div className="w-12 h-12 bg-brand-light rounded-full" />
+                  <AvatarDisplay name={user?.name || ""} avatar={avatarPreview} size={48} />
                   <div className="flex-1">
                     <div className="text-[15px] font-bold text-gray-text">
                       {user?.name}

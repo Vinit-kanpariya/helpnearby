@@ -78,6 +78,7 @@ router.post(
         ...req.body,
         requester: req.userId,
       });
+      await User.findByIdAndUpdate(req.userId, { $inc: { requestsPosted: 1 } });
       res.status(201).json({ request });
     } catch (error) {
       res.status(500).json({ message: "Server error" });
@@ -238,6 +239,72 @@ router.patch(
         });
       }
 
+      res.json({ request });
+    } catch (error) {
+      res.status(500).json({ message: "Server error" });
+    }
+  }
+);
+
+// PATCH /api/requests/:id/cancel - Withdraw/cancel a request (owner only, active only)
+router.patch(
+  "/:id/cancel",
+  authMiddleware,
+  async (req: AuthRequest, res: Response): Promise<void> => {
+    try {
+      const request = await HelpRequest.findById(req.params.id);
+      if (!request) {
+        res.status(404).json({ message: "Request not found" });
+        return;
+      }
+      if (request.requester.toString() !== req.userId) {
+        res.status(403).json({ message: "Not authorized" });
+        return;
+      }
+      if (request.status !== "active") {
+        res.status(400).json({ message: "Only active requests can be withdrawn" });
+        return;
+      }
+      request.status = "cancelled";
+      await request.save();
+      res.json({ request });
+    } catch (error) {
+      res.status(500).json({ message: "Server error" });
+    }
+  }
+);
+
+// PATCH /api/requests/:id - Update a request (owner only, active only)
+router.patch(
+  "/:id",
+  authMiddleware,
+  async (req: AuthRequest, res: Response): Promise<void> => {
+    try {
+      const request = await HelpRequest.findById(req.params.id);
+      if (!request) {
+        res.status(404).json({ message: "Request not found" });
+        return;
+      }
+      if (request.requester.toString() !== req.userId) {
+        res.status(403).json({ message: "Not authorized" });
+        return;
+      }
+      if (request.status !== "active") {
+        res.status(400).json({ message: "Only active requests can be edited" });
+        return;
+      }
+
+      const { title, description, date, time, rewardType, rewardAmount, rewardDescription, category } = req.body;
+      if (title !== undefined) request.title = title;
+      if (description !== undefined) request.description = description;
+      if (date !== undefined) request.date = date;
+      if (time !== undefined) request.time = time;
+      if (rewardType !== undefined) request.rewardType = rewardType;
+      if (rewardAmount !== undefined) request.rewardAmount = rewardAmount;
+      if (rewardDescription !== undefined) request.rewardDescription = rewardDescription;
+      if (category !== undefined) request.category = category;
+
+      await request.save();
       res.json({ request });
     } catch (error) {
       res.status(500).json({ message: "Server error" });

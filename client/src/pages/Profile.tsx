@@ -7,6 +7,33 @@ import { useAuth } from "../contexts/AuthContext";
 import { getMyPostedRequests, getMyOffers, getMe } from "../services/api";
 import type { HelpRequest, User } from "../types";
 
+function UserAvatar({ user, size = 80 }: { user: User; size?: number }) {
+  if (user.avatar) {
+    return (
+      <img
+        src={user.avatar}
+        alt={user.name}
+        style={{ width: size, height: size }}
+        className="rounded-full object-cover border-4 border-white/30"
+      />
+    );
+  }
+  const initials = user.name
+    .split(" ")
+    .map((n) => n[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase();
+  return (
+    <div
+      style={{ width: size, height: size, fontSize: size * 0.35 }}
+      className="rounded-full bg-white/20 border-4 border-white/30 flex items-center justify-center text-white font-bold shrink-0"
+    >
+      {initials}
+    </div>
+  );
+}
+
 export default function Profile() {
   const { user: ctxUser, updateUser } = useAuth();
   const [freshUser, setFreshUser] = useState<User | null>(null);
@@ -42,7 +69,7 @@ export default function Profile() {
       <main className="flex-1 overflow-y-auto max-md:pb-20">
         {/* Hero */}
         <div className="bg-brand-dark py-10 px-[120px] max-xl:px-8 max-md:px-4 flex flex-col items-center gap-3">
-          <div className="w-[80px] h-[80px] bg-brand-light rounded-full" />
+          <UserAvatar user={u} size={80} />
           <h1 className="text-[22px] font-extrabold text-white">{u.name}</h1>
           <p className="text-[13px] text-green-200">
             {u.location?.address || "Mumbai"} · Member since{" "}
@@ -56,7 +83,7 @@ export default function Profile() {
               {u.bio}
             </p>
           )}
-          <div className="flex gap-2 mt-1">
+          <div className="flex gap-2 mt-1 flex-wrap items-center justify-center">
             {u.verified && (
               <span className="text-[11px] font-semibold px-3 py-1 rounded-full bg-brand-light/20 text-brand-light border border-brand-light/30">
                 Verified
@@ -67,6 +94,12 @@ export default function Profile() {
                 Top Helper
               </span>
             )}
+            <Link
+              to="/settings"
+              className="flex items-center gap-1.5 text-[12px] font-semibold px-4 py-1.5 rounded-full bg-white/20 text-white border border-white/30 hover:bg-white/30 transition-colors"
+            >
+              <Pencil className="w-3.5 h-3.5" /> Edit Profile
+            </Link>
           </div>
         </div>
 
@@ -75,7 +108,7 @@ export default function Profile() {
           <div className="flex">
             {[
               { value: u.tasksHelped ?? 0, label: "Tasks Helped" },
-              { value: u.requestsPosted ?? posted.length, label: "Requests Posted" },
+              { value: posted.length, label: "Requests Posted" },
               { value: `${u.rating?.toFixed(1) ?? "0.0"}★`, label: "Average Rating" },
             ].map((stat) => (
               <div
@@ -141,13 +174,6 @@ export default function Profile() {
                 <p className="text-[13px] text-gray-muted">No activity yet</p>
               )}
             </div>
-
-            <Link
-              to="/settings"
-              className="mt-6 w-full bg-brand-dark text-white text-[14px] font-semibold py-3 rounded-[10px] hover:bg-green-800 transition-colors flex items-center justify-center gap-2"
-            >
-              <Pencil className="w-4 h-4" /> Edit Profile
-            </Link>
           </div>
         </div>
       </main>

@@ -1,11 +1,18 @@
 import { useState, useEffect } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
-import { ArrowLeft, MapPin, Clock, Star, HandHelping, CheckCircle, XCircle, MessageCircle } from "lucide-react";
+import { ArrowLeft, MapPin, Clock, Star, HandHelping, CheckCircle, XCircle, MessageCircle, Pencil, Trash2, X } from "lucide-react";
 import Navbar from "../components/Navbar";
 import BottomNav from "../components/BottomNav";
-import { getRequest, submitOffer, handleOffer, completeRequest } from "../services/api";
+import { getRequest, submitOffer, handleOffer, completeRequest, updateRequest, cancelRequest } from "../services/api";
 import { useAuth } from "../contexts/AuthContext";
 import type { HelpRequest, Offer } from "../types";
+
+const rewardTypes = [
+  { label: "Cash", value: "cash" },
+  { label: "Food / Chai", value: "food" },
+  { label: "Favour back", value: "favour" },
+  { label: "Free", value: "free" },
+];
 
 export default function RequestDetail() {
   const { id } = useParams();
@@ -21,10 +28,32 @@ export default function RequestDetail() {
   const [reviewComment, setReviewComment] = useState("");
   const [completing, setCompleting] = useState(false);
 
+  // Edit & withdraw state
+  const [showEdit, setShowEdit] = useState(false);
+  const [editForm, setEditForm] = useState({
+    title: "",
+    description: "",
+    rewardType: "cash",
+    rewardAmount: "",
+    rewardDescription: "",
+  });
+  const [editSaving, setEditSaving] = useState(false);
+  const [withdrawing, setWithdrawing] = useState(false);
+
   useEffect(() => {
     if (id) {
       getRequest(id)
-        .then((res) => setRequest(res.data.request || res.data))
+        .then((res) => {
+          const req = res.data.request || res.data;
+          setRequest(req);
+          setEditForm({
+            title: req.title || "",
+            description: req.description || "",
+            rewardType: req.rewardType || "cash",
+            rewardAmount: req.rewardAmount?.toString() || "",
+            rewardDescription: req.rewardDescription || "",
+          });
+        })
         .finally(() => setLoading(false));
     }
   }, [id]);
@@ -77,6 +106,43 @@ export default function RequestDetail() {
     }
   };
 
+  const handleEditSave = async () => {
+    if (!id) return;
+    if (!editForm.title.trim() || /^[.\s]+$/.test(editForm.title.trim())) {
+      alert("Title must contain meaningful text.");
+      return;
+    }
+    setEditSaving(true);
+    try {
+      await updateRequest(id, {
+        title: editForm.title.trim(),
+        description: editForm.description.trim(),
+        rewardType: editForm.rewardType,
+        rewardAmount: editForm.rewardAmount ? Number(editForm.rewardAmount) : undefined,
+        rewardDescription: editForm.rewardDescription.trim() || undefined,
+      });
+      await refreshRequest();
+      setShowEdit(false);
+    } catch {
+      alert("Failed to update request");
+    } finally {
+      setEditSaving(false);
+    }
+  };
+
+  const handleWithdraw = async () => {
+    if (!id) return;
+    if (!window.confirm("Withdraw this request? It will be removed from the feed.")) return;
+    setWithdrawing(true);
+    try {
+      await cancelRequest(id);
+      navigate("/browse");
+    } catch {
+      alert("Failed to withdraw request");
+      setWithdrawing(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="h-full flex items-center justify-center bg-brand-bg">
@@ -98,11 +164,9 @@ export default function RequestDetail() {
 
   const isOwner = user?._id === (request.requester?._id || request.requester);
   const myOffer = request.offers?.find(
-    (o) => (typeof o.user === "object" ? o.user._id : o.user) === user?._id
+    (o) => o.user && (typeof o.user === "object" ? (o.user as any)._id : o.user) === user?._id
   );
   const alreadyOffered = !!myOffer;
-
-  // Helpers who offered can see the offers section too
   const canSeeOffers = isOwner || alreadyOffered;
 
   return (
@@ -119,20 +183,131 @@ export default function RequestDetail() {
             <ArrowLeft className="w-4 h-4" /> Back to Browse
           </Link>
 
+          {/* Inline edit form */}
+          {showEdit && (
+            <div className="bg-white border border-brand-card-border rounded-xl p-6 mb-6">
+              <div className="flex items-center justify-between mb-5">
+                <h2 className="text-[16px] font-extrabold text-gray-text">Edit Request</h2>
+                <button onClick={() => setShowEdit(false)} className="text-gray-muted hover:text-gray-text">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              <div className="flex flex-col gap-4">
+                <div>
+                  <label className="text-[13px] font-semibold text-gray-secondary mb-1.5 block">Title</label>
+                  <input
+                    value={editForm.title}
+                    onChange={(e) => setEditForm((f) => ({ ...f, title: e.target.value }))}
+                    className="w-full border border-brand-card-border rounded-[10px] px-4 py-3 text-[14px] text-gray-text outline-none focus:ring-2 focus:ring-brand-dark/20"
+                  />
+                </div>
+                <div>
+                  <label className="text-[13px] font-semibold text-gray-secondary mb-1.5 block">Description</label>
+                  <textarea
+                    value={editForm.description}
+                    onChange={(e) => setEditForm((f) => ({ ...f, description: e.target.value }))}
+                    rows={3}
+                    className="w-full border border-brand-card-border rounded-[10px] px-4 py-3 text-[14px] text-gray-text outline-none focus:ring-2 focus:ring-brand-dark/20 resize-none"
+                  />
+                </div>
+                <div>
+                  <label className="text-[13px] font-semibold text-gray-secondary mb-2 block">Reward Type</label>
+                  <div className="flex gap-2 flex-wrap">
+                    {rewardTypes.map((r) => (
+                      <button
+                        key={r.value}
+                        type="button"
+                        onClick={() => setEditForm((f) => ({ ...f, rewardType: r.value }))}
+                        className={`text-[13px] font-semibold px-4 py-2 rounded-full border transition-colors ${
+                          editForm.rewardType === r.value
+                            ? "bg-brand-dark text-white border-brand-dark"
+                            : "bg-white border-brand-card-border text-gray-secondary"
+                        }`}
+                      >
+                        {r.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                {editForm.rewardType === "cash" && (
+                  <div>
+                    <label className="text-[13px] font-semibold text-gray-secondary mb-1.5 block">Amount (₹)</label>
+                    <input
+                      type="number"
+                      value={editForm.rewardAmount}
+                      onChange={(e) => setEditForm((f) => ({ ...f, rewardAmount: e.target.value }))}
+                      className="w-full border border-brand-card-border rounded-[10px] px-4 py-3 text-[14px] text-gray-text outline-none focus:ring-2 focus:ring-brand-dark/20"
+                    />
+                  </div>
+                )}
+                {(editForm.rewardType === "food" || editForm.rewardType === "favour") && (
+                  <div>
+                    <label className="text-[13px] font-semibold text-gray-secondary mb-1.5 block">Reward Description</label>
+                    <input
+                      type="text"
+                      value={editForm.rewardDescription}
+                      onChange={(e) => setEditForm((f) => ({ ...f, rewardDescription: e.target.value }))}
+                      className="w-full border border-brand-card-border rounded-[10px] px-4 py-3 text-[14px] text-gray-text outline-none focus:ring-2 focus:ring-brand-dark/20"
+                    />
+                  </div>
+                )}
+                <div className="flex gap-3 justify-end pt-1">
+                  <button
+                    onClick={() => setShowEdit(false)}
+                    className="px-5 py-2.5 text-[13px] text-gray-muted border border-brand-card-border rounded-[10px] hover:bg-white transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleEditSave}
+                    disabled={editSaving}
+                    className="px-6 py-2.5 bg-brand-dark text-white text-[13px] font-semibold rounded-[10px] hover:bg-green-800 transition-colors disabled:opacity-60"
+                  >
+                    {editSaving ? "Saving..." : "Save Changes"}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
           <div className="flex gap-8 max-md:flex-col">
             {/* Left column */}
             <div className="flex-1">
-              {/* Tags */}
-              <div className="flex gap-2 mb-3">
-                {request.status === "active" && (
-                  <span className="text-[11px] font-semibold px-2.5 py-1 rounded-full bg-orange-100 text-orange-700 border border-orange-200">
-                    Urgent
+              {/* Tags + owner actions */}
+              <div className="flex items-start justify-between mb-3 gap-3">
+                <div className="flex gap-2 flex-wrap">
+                  {request.status === "active" && (
+                    <span className="text-[11px] font-semibold px-2.5 py-1 rounded-full bg-orange-100 text-orange-700 border border-orange-200">
+                      Urgent
+                    </span>
+                  )}
+                  <span className="text-[11px] font-semibold px-2.5 py-1 rounded-full bg-brand-card-bg text-brand-dark border border-brand-card-border">
+                    {request.category.charAt(0).toUpperCase() + request.category.slice(1)}
                   </span>
+                  {request.status === "cancelled" && (
+                    <span className="text-[11px] font-semibold px-2.5 py-1 rounded-full bg-red-100 text-red-600 border border-red-200">
+                      Withdrawn
+                    </span>
+                  )}
+                </div>
+                {/* Owner controls for active requests */}
+                {isOwner && request.status === "active" && (
+                  <div className="flex gap-2 shrink-0">
+                    <button
+                      onClick={() => setShowEdit((v) => !v)}
+                      className="flex items-center gap-1.5 text-[12px] font-semibold text-brand-dark bg-brand-card-bg border border-brand-card-border px-3 py-1.5 rounded-lg hover:bg-brand-card-border transition-colors"
+                    >
+                      <Pencil className="w-3.5 h-3.5" /> Edit
+                    </button>
+                    <button
+                      onClick={handleWithdraw}
+                      disabled={withdrawing}
+                      className="flex items-center gap-1.5 text-[12px] font-semibold text-red-600 bg-red-50 border border-red-200 px-3 py-1.5 rounded-lg hover:bg-red-100 transition-colors disabled:opacity-50"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" /> {withdrawing ? "Withdrawing…" : "Withdraw"}
+                    </button>
+                  </div>
                 )}
-                <span className="text-[11px] font-semibold px-2.5 py-1 rounded-full bg-brand-card-bg text-brand-dark border border-brand-card-border">
-                  {request.category.charAt(0).toUpperCase() +
-                    request.category.slice(1)}
-                </span>
               </div>
 
               <h1 className="text-[22px] max-md:text-[18px] font-extrabold text-gray-text mb-4">
@@ -181,13 +356,11 @@ export default function RequestDetail() {
                 </div>
               </div>
 
-              {/* Offers section — visible to owner and to anyone who has offered */}
+              {/* Offers section */}
               {canSeeOffers && request.offers && request.offers.length > 0 && (
                 <div>
                   <h3 className="text-[14px] font-bold text-gray-text mb-3">
-                    {isOwner
-                      ? `Offers (${request.offers.length})`
-                      : "Your Offer"}
+                    {isOwner ? `Offers (${request.offers.length})` : "Your Offer"}
                   </h3>
                   <div className="flex flex-col gap-3">
                     {(isOwner ? request.offers : request.offers.filter(
@@ -222,7 +395,6 @@ export default function RequestDetail() {
                               {offer.message}
                             </p>
                           </div>
-                          {/* Accept / Reject buttons — only for owner, only if pending */}
                           {isOwner && offer.status === "pending" && (
                             <div className="flex gap-2 shrink-0">
                               <button
@@ -230,16 +402,14 @@ export default function RequestDetail() {
                                 disabled={isActioning}
                                 className="flex items-center gap-1 text-[12px] font-semibold text-green-700 bg-green-50 border border-green-200 px-3 py-1.5 rounded-lg hover:bg-green-100 transition-colors disabled:opacity-50"
                               >
-                                <CheckCircle className="w-3.5 h-3.5" />
-                                Accept
+                                <CheckCircle className="w-3.5 h-3.5" /> Accept
                               </button>
                               <button
                                 onClick={() => handleOfferAction(offer._id, "rejected")}
                                 disabled={isActioning}
                                 className="flex items-center gap-1 text-[12px] font-semibold text-red-600 bg-red-50 border border-red-200 px-3 py-1.5 rounded-lg hover:bg-red-100 transition-colors disabled:opacity-50"
                               >
-                                <XCircle className="w-3.5 h-3.5" />
-                                Reject
+                                <XCircle className="w-3.5 h-3.5" /> Reject
                               </button>
                             </div>
                           )}
@@ -297,14 +467,18 @@ export default function RequestDetail() {
                 )}
               </div>
 
-              {/* Request already fulfilled — no more offers */}
+              {/* Request already fulfilled */}
               {!isOwner && request.status !== "active" && (
                 <div className="w-full text-center text-[13px] text-gray-muted bg-gray-50 border border-gray-200 rounded-[10px] py-3 px-4">
-                  {request.status === "completed" ? "This request has been fulfilled." : "Someone is already helping with this request."}
+                  {request.status === "completed"
+                    ? "This request has been fulfilled."
+                    : request.status === "cancelled"
+                    ? "This request was withdrawn."
+                    : "Someone is already helping with this request."}
                 </div>
               )}
 
-              {/* Offer CTA — non-owner, not yet offered, logged in, request still active */}
+              {/* Offer CTA */}
               {!isOwner && !alreadyOffered && user && request.status === "active" && (
                 <>
                   <input
@@ -324,7 +498,7 @@ export default function RequestDetail() {
                 </>
               )}
 
-              {/* Already offered — show disabled button (only while active) */}
+              {/* Already offered */}
               {!isOwner && alreadyOffered && request.status === "active" && (
                 <button
                   disabled
@@ -343,7 +517,7 @@ export default function RequestDetail() {
                 {request.offers?.length || 0} people already offered help
               </p>
 
-              {/* Mark as Complete — owner only, when in progress */}
+              {/* Mark as Complete */}
               {isOwner && request.status === "in_progress" && !showReview && (
                 <button
                   onClick={() => setShowReview(true)}
@@ -401,12 +575,11 @@ export default function RequestDetail() {
                 </div>
               )}
 
-              {/* Chat button — visible once any offer is accepted */}
+              {/* Chat button */}
               {(() => {
                 const acceptedOffer = request.offers?.find(o => o.status === "accepted");
                 if (!acceptedOffer) return null;
                 const helperUser = typeof acceptedOffer.user === "object" ? acceptedOffer.user : null;
-                // Show to owner: chat with helper. Show to helper: chat with requester.
                 const chatWith = isOwner ? helperUser : request.requester;
                 if (!chatWith || !user) return null;
                 const chatId = typeof chatWith === "object" ? chatWith._id : chatWith;

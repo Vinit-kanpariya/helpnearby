@@ -120,6 +120,20 @@ export default function PostRequest() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    // Reject titles/descriptions that are only dots or whitespace
+    if (!form.title.trim() || /^[.\s]+$/.test(form.title.trim())) {
+      setError("Title must contain meaningful text.");
+      return;
+    }
+    if (!form.description.trim() || /^[.\s]+$/.test(form.description.trim())) {
+      setError("Description must contain meaningful text.");
+      return;
+    }
+    if ((form.rewardType === "food" || form.rewardType === "favour") && !rewardDescription.trim()) {
+      setError("Please describe your reward.");
+      return;
+    }
     if (!form.location.trim()) { setError("Please enter a location."); return; }
     setLoading(true);
     setError("");
@@ -199,6 +213,7 @@ export default function PostRequest() {
               onChange={(e) => update("description", e.target.value)}
               placeholder="Share any details that will help someone assist you better..."
               rows={4}
+              required
               className="w-full border border-brand-card-border rounded-[10px] px-4 py-3 text-[14px] text-gray-text outline-none focus:ring-2 focus:ring-brand-dark/20 placeholder-gray-placeholder resize-none"
             />
           </div>
@@ -211,6 +226,7 @@ export default function PostRequest() {
               <input
                 type="date"
                 value={form.date}
+                min={new Date().toISOString().split("T")[0]}
                 onChange={(e) => update("date", e.target.value)}
                 className="w-full border border-brand-card-border rounded-[10px] px-4 py-3 text-[14px] text-gray-text outline-none focus:ring-2 focus:ring-brand-dark/20"
               />
@@ -323,7 +339,7 @@ export default function PostRequest() {
             <div>
               <label className="text-[13px] font-semibold text-gray-secondary mb-1.5 block">
                 Reward Description{" "}
-                <span className="text-gray-placeholder font-normal">(optional)</span>
+                <span className="text-red-500 font-normal">*</span>
               </label>
               <input
                 type="text"

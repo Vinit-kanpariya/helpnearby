@@ -70,6 +70,12 @@ export const getMyPostedRequests = () => api.get("/requests/my/posted");
 
 export const getMyOffers = () => api.get("/requests/my/offers");
 
+export const updateRequest = (id: string, data: Record<string, unknown>) =>
+  api.patch(`/requests/${id}`, data);
+
+export const cancelRequest = (id: string) =>
+  api.patch(`/requests/${id}/cancel`);
+
 // Users
 export const getProfile = () => api.get("/users/profile");
 
