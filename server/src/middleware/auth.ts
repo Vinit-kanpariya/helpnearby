@@ -16,12 +16,15 @@ export const authMiddleware = (
     return;
   }
 
+  if (!process.env.JWT_SECRET) {
+    console.error("[auth] JWT_SECRET environment variable is not set");
+    res.status(500).json({ message: "Server misconfiguration" });
+    return;
+  }
+
   const token = header.split(" ")[1];
   try {
-    const decoded = jwt.verify(
-      token,
-      process.env.JWT_SECRET || "fallback_secret"
-    ) as { userId: string };
+    const decoded = jwt.verify(token, process.env.JWT_SECRET) as { userId: string };
     req.userId = decoded.userId;
     next();
   } catch {

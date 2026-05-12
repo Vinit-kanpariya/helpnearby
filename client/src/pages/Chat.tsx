@@ -49,14 +49,28 @@ export default function Chat() {
         }
       })
       .finally(() => setLoading(false));
-  }, []);
+  }, [searchParams]);
 
   useEffect(() => {
-    if (activeChat) {
-      getMessages(activeChat.user._id).then((res) => {
-        setMessages(res.data.messages || res.data || []);
-      });
-    }
+    // Clear stale messages from the previous conversation immediately so the
+    // user never sees another contact's messages under the new header.
+    setMessages([]);
+    if (!activeChat) return;
+    const targetId = activeChat.user._id;
+    let cancelled = false;
+    getMessages(targetId).then((res) => {
+      if (cancelled) return;
+      setMessages(res.data.messages || res.data || []);
+    });
+    // Mark this conversation read locally — server marks read on fetch.
+    setConversations((prev) =>
+      prev.map((c) =>
+        c.user._id === targetId ? { ...c, unreadCount: 0 } : c
+      )
+    );
+    return () => {
+      cancelled = true;
+    };
   }, [activeChat]);
 
   useEffect(() => {
@@ -64,15 +78,42 @@ export default function Chat() {
   }, [messages]);
 
   useEffect(() => {
-    if (socket) {
-      socket.on("newMessage", (msg: MsgType) => {
-        setMessages((prev) => [...prev, msg]);
+    if (!socket || !user) return;
+    const handler = (msg: MsgType) => {
+      const senderId =
+        typeof msg.sender === "object" ? msg.sender._id : msg.sender;
+      const receiverId =
+        typeof msg.receiver === "object" ? msg.receiver._id : msg.receiver;
+      const otherId = senderId === user._id ? receiverId : senderId;
+
+      // Only append to the open chat if the message belongs to it.
+      if (activeChat && otherId === activeChat.user._id) {
+        setMessages((prev) =>
+          prev.some((m) => m._id === msg._id) ? prev : [...prev, msg]
+        );
+      }
+
+      // Update the conversation list: bump unread for non-active chats and
+      // move the conversation to the top with the new last message.
+      setConversations((prev) => {
+        const idx = prev.findIndex((c) => c.user._id === otherId);
+        if (idx === -1) return prev;
+        const updated = { ...prev[idx] };
+        updated.lastMessage = msg;
+        const isActive = activeChat?.user._id === otherId;
+        const isInbound = senderId !== user._id;
+        if (isInbound && !isActive) {
+          updated.unreadCount = (updated.unreadCount || 0) + 1;
+        }
+        const rest = prev.filter((_, i) => i !== idx);
+        return [updated, ...rest];
       });
-      return () => {
-        socket.off("newMessage");
-      };
-    }
-  }, [socket]);
+    };
+    socket.on("newMessage", handler);
+    return () => {
+      socket.off("newMessage", handler);
+    };
+  }, [socket, user, activeChat]);
 
   const sendMessage = async () => {
     if (!input.trim() || !activeChat || !user) return;
@@ -150,6 +191,11 @@ export default function Chat() {
                     {conv.lastMessage?.content || "Start chatting"}
                   </div>
                 </div>
+                {conv.unreadCount > 0 && (
+                  <span className="bg-brand-dark text-white text-[11px] font-bold rounded-full min-w-[20px] h-5 px-1.5 flex items-center justify-center shrink-0">
+                    {conv.unreadCount}
+                  </span>
+                )}
               </button>
             ))}
           </div>

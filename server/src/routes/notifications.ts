@@ -1,4 +1,5 @@
 import { Router, Response } from "express";
+import mongoose from "mongoose";
 import Notification from "../models/Notification";
 import { authMiddleware, AuthRequest } from "../middleware/auth";
 
@@ -10,9 +11,12 @@ router.get(
   authMiddleware,
   async (req: AuthRequest, res: Response): Promise<void> => {
     try {
+      const limit = Math.min(Number(req.query.limit) || 50, 100);
+      const skip = Math.max(Number(req.query.skip) || 0, 0);
       const notifications = await Notification.find({ user: req.userId })
         .sort({ createdAt: -1 })
-        .limit(50);
+        .skip(skip)
+        .limit(limit);
       res.json({ notifications });
     } catch (error) {
       res.status(500).json({ message: "Server error" });
@@ -42,6 +46,10 @@ router.patch(
   "/:id/read",
   authMiddleware,
   async (req: AuthRequest, res: Response): Promise<void> => {
+    if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+      res.status(400).json({ message: "Invalid notification id" });
+      return;
+    }
     try {
       const notification = await Notification.findOneAndUpdate(
         { _id: req.params.id, user: req.userId },

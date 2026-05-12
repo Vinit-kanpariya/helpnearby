@@ -1,4 +1,4 @@
-import axios from "axios";
+import axios, { AxiosError, InternalAxiosRequestConfig } from "axios";
 
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL
@@ -15,13 +15,35 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
+// Endpoints that may legitimately 401 without indicating an expired session
+// (e.g. login form with bad credentials). Don't bounce the user to /login.
+const NON_REDIRECT_AUTH_PATHS = ["/auth/login", "/auth/register", "/auth/google"];
+
 api.interceptors.response.use(
   (res) => res,
-  (err) => {
-    if (err.response?.status === 401) {
-      localStorage.removeItem("token");
-      localStorage.removeItem("user");
-      window.location.href = "/login";
+  (err: AxiosError) => {
+    const status = err.response?.status;
+    const reqUrl = (err.config as InternalAxiosRequestConfig | undefined)?.url || "";
+    const onLoginPage =
+      typeof window !== "undefined" &&
+      (window.location.pathname === "/login" ||
+        window.location.pathname === "/signup");
+
+    if (status === 401) {
+      const isAuthAttempt = NON_REDIRECT_AUTH_PATHS.some((p) =>
+        reqUrl.includes(p)
+      );
+      // For login/signup attempts, surface the error inline — never redirect.
+      // For other 401s, only redirect if the user actually had a token (i.e.
+      // a session expired); pure-public-page 401s shouldn't yank the user
+      // anywhere, and being already on /login should never trigger a reload.
+      if (!isAuthAttempt && !onLoginPage) {
+        const hadToken = !!localStorage.getItem("token");
+        if (hadToken) {
+          localStorage.removeItem("token");
+          window.location.href = "/login";
+        }
+      }
     }
     return Promise.reject(err);
   }
@@ -42,6 +64,9 @@ export const getMe = () => api.get("/auth/me");
 
 export const googleLogin = (params: { credential?: string; accessToken?: string }) =>
   api.post("/auth/google", params);
+
+export const changePassword = (data: { currentPassword: string; newPassword: string }) =>
+  api.patch("/auth/password", data);
 
 export const getStats = () => api.get("/stats");
 

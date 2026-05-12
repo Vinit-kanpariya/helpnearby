@@ -35,7 +35,7 @@ const helpRequestSchema = new Schema<IHelpRequest>(
     },
     status: {
       type: String,
-      enum: ["active", "in_progress", "completed", "cancelled"],
+      enum: ["active", "in_progress", "completed", "cancelled", "expired"],
       default: "active",
     },
     date: String,

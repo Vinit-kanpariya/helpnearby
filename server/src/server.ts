@@ -67,7 +67,9 @@ app.get("/api/stats", async (_req, res) => {
     const [userCount, requestCount, completedCount] = await Promise.all([
       User.countDocuments(),
       HelpRequest.countDocuments(),
-      HelpRequest.countDocuments({ status: { $in: ["in_progress", "completed"] } }),
+      // Only count genuinely completed work — exclude auto-expired requests
+      // that were never picked up.
+      HelpRequest.countDocuments({ status: "completed" }),
     ]);
     res.json({ userCount, requestCount, completedCount });
   } catch {

@@ -9,10 +9,14 @@ const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
 const router = Router();
 
-const generateToken = (userId: string): string =>
-  jwt.sign({ userId }, process.env.JWT_SECRET || "fallback_secret", {
+const generateToken = (userId: string): string => {
+  if (!process.env.JWT_SECRET) {
+    throw new Error("JWT_SECRET environment variable is required");
+  }
+  return jwt.sign({ userId }, process.env.JWT_SECRET, {
     expiresIn: "30d",
   });
+};
 
 // POST /api/auth/register
 router.post(
@@ -49,7 +53,7 @@ router.post(
       });
 
       const token = generateToken(user._id.toString());
-      res.status(201).json({ token, user });
+      res.status(201).json({ token, user: user.toJSON() });
     } catch (error) {
       console.error("[auth]", error);
       res.status(500).json({ message: "Server error" });
@@ -88,6 +92,45 @@ router.post(
       const token = generateToken(user._id.toString());
       const userObj = user.toJSON();
       res.json({ token, user: userObj });
+    } catch (error) {
+      console.error("[auth]", error);
+      res.status(500).json({ message: "Server error" });
+    }
+  }
+);
+
+// PATCH /api/auth/password — change password (authenticated)
+router.patch(
+  "/password",
+  authMiddleware,
+  [
+    body("currentPassword").notEmpty().withMessage("Current password is required"),
+    body("newPassword")
+      .isLength({ min: 6 })
+      .withMessage("New password must be at least 6 characters"),
+  ],
+  async (req: AuthRequest, res: Response): Promise<void> => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      res.status(400).json({ message: errors.array()[0].msg });
+      return;
+    }
+
+    try {
+      const { currentPassword, newPassword } = req.body;
+      const user = await User.findById(req.userId).select("+password");
+      if (!user) {
+        res.status(404).json({ message: "User not found" });
+        return;
+      }
+      const isMatch = await user.comparePassword(currentPassword);
+      if (!isMatch) {
+        res.status(401).json({ message: "Current password is incorrect" });
+        return;
+      }
+      user.password = newPassword;
+      await user.save();
+      res.json({ message: "Password updated" });
     } catch (error) {
       console.error("[auth]", error);
       res.status(500).json({ message: "Server error" });
@@ -141,6 +184,10 @@ router.post("/google", async (req: Request, res: Response): Promise<void> => {
         res.status(400).json({ message: "Invalid Google token" });
         return;
       }
+      if (!payload.email_verified) {
+        res.status(401).json({ message: "Google email is not verified" });
+        return;
+      }
       email = payload.email;
       name = payload.name;
       picture = payload.picture;
@@ -152,7 +199,19 @@ router.post("/google", async (req: Request, res: Response): Promise<void> => {
         res.status(401).json({ message: "Invalid Google access token" });
         return;
       }
-      const info = await response.json() as { email?: string; name?: string; picture?: string };
+      const info = await response.json() as {
+        email?: string;
+        email_verified?: boolean | string;
+        name?: string;
+        picture?: string;
+      };
+      // Google's userinfo endpoint returns email_verified as a boolean (or "true"/"false" string).
+      const verified =
+        info.email_verified === true || info.email_verified === "true";
+      if (!verified) {
+        res.status(401).json({ message: "Google email is not verified" });
+        return;
+      }
       email = info.email;
       name = info.name;
       picture = info.picture;

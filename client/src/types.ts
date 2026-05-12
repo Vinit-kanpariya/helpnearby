@@ -31,7 +31,7 @@ export interface HelpRequest {
   description: string;
   requester: User;
   category: string;
-  status: "active" | "in_progress" | "completed" | "cancelled";
+  status: "active" | "in_progress" | "completed" | "cancelled" | "expired";
   date: string;
   time: string;
   location: {

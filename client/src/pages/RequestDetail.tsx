@@ -61,7 +61,19 @@ export default function RequestDetail() {
   const refreshRequest = async () => {
     if (!id) return;
     const res = await getRequest(id);
-    setRequest(res.data.request || res.data);
+    const req = res.data.request || res.data;
+    setRequest(req);
+    // Only refresh the editForm when the user isn't actively editing — never
+    // clobber unsaved typing on a server refetch.
+    if (!showEdit) {
+      setEditForm({
+        title: req.title || "",
+        description: req.description || "",
+        rewardType: req.rewardType || "cash",
+        rewardAmount: req.rewardAmount?.toString() || "",
+        rewardDescription: req.rewardDescription || "",
+      });
+    }
   };
 
   const handleOfferSubmit = async () => {
@@ -95,12 +107,17 @@ export default function RequestDetail() {
 
   const handleOfferAction = async (offerId: string, status: "accepted" | "rejected") => {
     if (!id) return;
+    // Block any concurrent offer action — once accepted, the request flips to
+    // in_progress and other offers are auto-rejected server-side, so the UI
+    // shouldn't let the owner queue further actions in the meantime.
+    if (actioningOffer) return;
     setActioningOffer(offerId);
     try {
       await handleOffer(id, offerId, status);
       await refreshRequest();
-    } catch {
-      alert("Failed to update offer");
+    } catch (err: unknown) {
+      const e = err as { response?: { data?: { message?: string } } };
+      alert(e.response?.data?.message || "Failed to update offer");
     } finally {
       setActioningOffer(null);
     }
@@ -395,21 +412,21 @@ export default function RequestDetail() {
                               {offer.message}
                             </p>
                           </div>
-                          {isOwner && offer.status === "pending" && (
+                          {isOwner && offer.status === "pending" && request.status === "active" && (
                             <div className="flex gap-2 shrink-0">
                               <button
                                 onClick={() => handleOfferAction(offer._id, "accepted")}
-                                disabled={isActioning}
+                                disabled={!!actioningOffer}
                                 className="flex items-center gap-1 text-[12px] font-semibold text-green-700 bg-green-50 border border-green-200 px-3 py-1.5 rounded-lg hover:bg-green-100 transition-colors disabled:opacity-50"
                               >
-                                <CheckCircle className="w-3.5 h-3.5" /> Accept
+                                <CheckCircle className="w-3.5 h-3.5" /> {isActioning ? "..." : "Accept"}
                               </button>
                               <button
                                 onClick={() => handleOfferAction(offer._id, "rejected")}
-                                disabled={isActioning}
+                                disabled={!!actioningOffer}
                                 className="flex items-center gap-1 text-[12px] font-semibold text-red-600 bg-red-50 border border-red-200 px-3 py-1.5 rounded-lg hover:bg-red-100 transition-colors disabled:opacity-50"
                               >
-                                <XCircle className="w-3.5 h-3.5" /> Reject
+                                <XCircle className="w-3.5 h-3.5" /> {isActioning ? "..." : "Reject"}
                               </button>
                             </div>
                           )}

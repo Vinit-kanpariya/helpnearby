@@ -79,7 +79,12 @@ router.get(
   "/messages/:userId",
   authMiddleware,
   async (req: AuthRequest, res: Response): Promise<void> => {
+    if (!mongoose.Types.ObjectId.isValid(req.params.userId)) {
+      res.status(400).json({ message: "Invalid user id" });
+      return;
+    }
     try {
+      const limit = Math.min(Number(req.query.limit) || 100, 200);
       const messages = await Message.find({
         $or: [
           { sender: req.userId, receiver: req.params.userId },
@@ -87,7 +92,7 @@ router.get(
         ],
       })
         .sort({ createdAt: 1 })
-        .limit(100);
+        .limit(limit);
 
       // Mark received messages as read
       await Message.updateMany(
@@ -115,6 +120,14 @@ router.post(
       const { receiver, content } = req.body;
       if (!receiver || !content?.trim()) {
         res.status(400).json({ message: "receiver and content are required" });
+        return;
+      }
+      if (!mongoose.Types.ObjectId.isValid(receiver)) {
+        res.status(400).json({ message: "Invalid receiver id" });
+        return;
+      }
+      if (receiver === req.userId) {
+        res.status(400).json({ message: "Cannot message yourself" });
         return;
       }
       const message = await Message.create({

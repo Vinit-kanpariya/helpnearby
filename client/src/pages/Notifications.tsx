@@ -72,6 +72,10 @@ export default function Notifications() {
   });
 
   const unreadCount = notifications.filter((n) => !n.read).length;
+  const oneWeekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+  const thisWeekCount = notifications.filter(
+    (n) => new Date(n.createdAt).getTime() >= oneWeekAgo
+  ).length;
 
   return (
     <div className="h-full flex flex-col bg-brand-bg">
@@ -180,7 +184,7 @@ export default function Notifications() {
               <div className="flex items-center justify-between">
                 <span className="text-[13px] text-gray-muted">This week</span>
                 <span className="text-[13px] font-bold text-gray-text">
-                  {notifications.length}
+                  {thisWeekCount}
                 </span>
               </div>
               <div className="flex items-center justify-between">

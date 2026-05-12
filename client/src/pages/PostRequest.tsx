@@ -25,7 +25,28 @@ export default function PostRequest() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const hasLocation =
-    user?.location?.coordinates && user.location.coordinates[0] !== 0;
+    !!user?.location?.coordinates && user.location.coordinates[0] !== 0;
+
+  // All hooks must be declared unconditionally and in the same order on every
+  // render — never behind an early return.
+  const [form, setForm] = useState({
+    title: "",
+    description: "",
+    date: "",
+    time: "",
+    location: "",
+    rewardType: "cash",
+    rewardAmount: "",
+    category: "other",
+  });
+  const [coords, setCoords] = useState<[number, number]>([0, 0]);
+  const [rewardDescription, setRewardDescription] = useState("");
+  const [suggestions, setSuggestions] = useState<NominatimResult[]>([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [geocoding, setGeocoding] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   if (!hasLocation) {
     return (
@@ -55,24 +76,6 @@ export default function PostRequest() {
       </div>
     );
   }
-  const [form, setForm] = useState({
-    title: "",
-    description: "",
-    date: "",
-    time: "",
-    location: "",
-    rewardType: "cash",
-    rewardAmount: "",
-    category: "other",
-  });
-  const [coords, setCoords] = useState<[number, number]>([0, 0]);
-  const [rewardDescription, setRewardDescription] = useState("");
-  const [suggestions, setSuggestions] = useState<NominatimResult[]>([]);
-  const [showSuggestions, setShowSuggestions] = useState(false);
-  const [geocoding, setGeocoding] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const update = (field: string, value: string) =>
     setForm((f) => ({ ...f, [field]: value }));
@@ -134,6 +137,8 @@ export default function PostRequest() {
       setError("Please describe your reward.");
       return;
     }
+    if (!form.date) { setError("Please pick a date."); return; }
+    if (!form.time) { setError("Please pick a time."); return; }
     if (!form.location.trim()) { setError("Please enter a location."); return; }
     setLoading(true);
     setError("");
@@ -228,6 +233,7 @@ export default function PostRequest() {
                 value={form.date}
                 min={new Date().toISOString().split("T")[0]}
                 onChange={(e) => update("date", e.target.value)}
+                required
                 className="w-full border border-brand-card-border rounded-[10px] px-4 py-3 text-[14px] text-gray-text outline-none focus:ring-2 focus:ring-brand-dark/20"
               />
             </div>

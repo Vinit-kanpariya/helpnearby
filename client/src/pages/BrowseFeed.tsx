@@ -138,26 +138,43 @@ export default function BrowseFeed() {
 
   useEffect(() => {
     setLoading(true);
-    Promise.all([
+    // Use Promise.allSettled so a single failed status fetch doesn't wipe
+    // the results from the others.
+    Promise.allSettled([
       getRequests({ status: "active" }),
       getRequests({ status: "completed" }),
       getRequests({ status: "in_progress" }),
     ])
       .then(([activeRes, completedRes, inProgressRes]) => {
-        const inProgress = inProgressRes.data.requests || inProgressRes.data || [];
-        setRequests([...(activeRes.data.requests || activeRes.data || []), ...inProgress]);
-        setCompletedRequests(completedRes.data.requests || completedRes.data || []);
+        const active =
+          activeRes.status === "fulfilled"
+            ? activeRes.value.data.requests || activeRes.value.data || []
+            : [];
+        const completed =
+          completedRes.status === "fulfilled"
+            ? completedRes.value.data.requests || completedRes.value.data || []
+            : [];
+        const inProgress =
+          inProgressRes.status === "fulfilled"
+            ? inProgressRes.value.data.requests || inProgressRes.value.data || []
+            : [];
+        setRequests([...active, ...inProgress]);
+        setCompletedRequests(completed);
       })
-      .catch(() => { setRequests([]); setCompletedRequests([]); })
       .finally(() => setLoading(false));
   }, []);
 
   const filterByDistance = (list: HelpRequest[]) => {
-    if (!userCoords) return list;
-    const limitKm = distanceLimitKm(distance);
-    return list.filter((r) => {
+    // Always exclude posts without a real location, regardless of whether
+    // the user's coords are set — those posts have no useful distance.
+    const withCoords = list.filter((r) => {
       const [lon, lat] = r.location?.coordinates ?? [0, 0];
-      if (lon === 0 && lat === 0) return false; // exclude posts without valid location
+      return !(lon === 0 && lat === 0);
+    });
+    if (!userCoords) return withCoords;
+    const limitKm = distanceLimitKm(distance);
+    return withCoords.filter((r) => {
+      const [lon, lat] = r.location.coordinates;
       return haversineKm(userCoords[0], userCoords[1], lon, lat) <= limitKm;
     });
   };

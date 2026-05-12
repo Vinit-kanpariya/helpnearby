@@ -28,6 +28,7 @@ export default function Login() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [googleReady, setGoogleReady] = useState(false);
+  const [googleError, setGoogleError] = useState(false);
   const [stats, setStats] = useState<{ userCount: number; completedCount: number } | null>(null);
 
   useEffect(() => {
@@ -42,7 +43,18 @@ export default function Login() {
     const interval = setInterval(() => {
       if (window.google) { clearInterval(interval); setGoogleReady(true); }
     }, 100);
-    return () => clearInterval(interval);
+    // Give up after 8s and show an error so users aren't stuck with a
+    // permanently-disabled button.
+    const timeout = setTimeout(() => {
+      if (!window.google) {
+        clearInterval(interval);
+        setGoogleError(true);
+      }
+    }, 8000);
+    return () => {
+      clearInterval(interval);
+      clearTimeout(timeout);
+    };
   }, []);
 
   const handleGoogleClick = () => {
@@ -152,10 +164,15 @@ export default function Login() {
             </div>
           )}
 
+          {googleError && (
+            <div className="bg-amber-50 text-amber-700 text-[12px] px-4 py-2.5 rounded-lg border border-amber-200 mb-3">
+              Google sign-in is unavailable. Use email & password instead.
+            </div>
+          )}
           <button
             type="button"
             onClick={handleGoogleClick}
-            disabled={!googleReady || loading}
+            disabled={!googleReady || loading || googleError}
             className="w-full flex items-center justify-center gap-3 border border-brand-card-border rounded-[10px] px-4 py-3 bg-white text-[14px] font-medium text-gray-600 hover:bg-gray-50 transition-colors disabled:opacity-50 mb-6"
           >
             <svg viewBox="0 0 24 24" width="18" height="18">

@@ -23,30 +23,37 @@ export function SocketProvider({ children }: { children: ReactNode }) {
   const [socket, setSocket] = useState<Socket | null>(null);
   const [online, setOnline] = useState(false);
 
+  // Only the userId and token are load-bearing here. Depending on the full
+  // `user` object would tear down and rebuild the socket on every profile
+  // update (avatar, bio, location), causing duplicate "join" events and
+  // dropped real-time messages.
+  const userId = user?._id;
+
   useEffect(() => {
-    if (user && token) {
-      const s = io(import.meta.env.VITE_API_URL || "/", {
-        auth: { token },
-      });
+    if (!userId || !token) {
+      setOnline(false);
+      return;
+    }
 
-      s.on("connect", () => {
-        setOnline(true);
-        s.emit("join", user._id);
-      });
+    const s = io(import.meta.env.VITE_API_URL || "/", {
+      auth: { token },
+    });
 
-      s.on("disconnect", () => setOnline(false));
+    s.on("connect", () => {
+      setOnline(true);
+      s.emit("join");
+    });
+    s.on("disconnect", () => setOnline(false));
 
-      setSocket(s);
+    setSocket(s);
 
-      return () => {
-        s.disconnect();
-      };
-    } else {
-      socket?.disconnect();
+    return () => {
+      s.removeAllListeners();
+      s.disconnect();
       setSocket(null);
       setOnline(false);
-    }
-  }, [user, token]);
+    };
+  }, [userId, token]);
 
   return (
     <SocketContext.Provider value={{ socket, online }}>

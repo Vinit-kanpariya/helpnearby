@@ -15,7 +15,7 @@ import {
 import Navbar from "../components/Navbar";
 import BottomNav from "../components/BottomNav";
 import { useAuth } from "../contexts/AuthContext";
-import { updateProfile } from "../services/api";
+import { updateProfile, changePassword } from "../services/api";
 
 const sidebarItems = [
   { icon: User, label: "Profile", id: "profile" },
@@ -98,13 +98,22 @@ export default function Settings() {
   const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    if (!/^image\/(png|jpeg|jpg|webp)$/.test(file.type)) {
+      alert("Please choose a PNG, JPEG or WebP image.");
+      e.target.value = "";
+      return;
+    }
     if (file.size > 3 * 1024 * 1024) {
       alert("Image must be under 3 MB.");
+      e.target.value = "";
       return;
     }
     const reader = new FileReader();
     reader.onload = () => {
       setAvatarPreview(reader.result as string);
+    };
+    reader.onerror = () => {
+      alert("Could not read the image file.");
     };
     reader.readAsDataURL(file);
   };
@@ -113,20 +122,60 @@ export default function Settings() {
     setSaving(true);
     setSaveSuccess(false);
     try {
+      // Preserve existing coordinates when saving profile fields. The location
+      // tab is the only place that should overwrite them.
+      const existingCoords = user?.location?.coordinates;
+      const coords: [number, number] =
+        existingCoords && existingCoords.length === 2
+          ? [existingCoords[0], existingCoords[1]]
+          : [0, 0];
       const res = await updateProfile({
         name: form.name,
         phone: form.phone,
         bio: form.bio,
-        location: { address: form.location, coordinates: [0, 0] },
+        location: { address: form.location, coordinates: coords },
         avatar: avatarPreview,
       });
       updateUser(res.data.user || res.data);
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 3000);
-    } catch {
-      alert("Failed to save");
+    } catch (err: unknown) {
+      const e = err as { response?: { data?: { message?: string } } };
+      alert(e.response?.data?.message || "Failed to save");
     } finally {
       setSaving(false);
+    }
+  };
+
+  const [pwSaving, setPwSaving] = useState(false);
+  const [pwError, setPwError] = useState("");
+  const [pwSuccess, setPwSuccess] = useState(false);
+
+  const handlePasswordChange = async () => {
+    setPwError("");
+    setPwSuccess(false);
+    if (passwords.next !== passwords.confirm) {
+      setPwError("New passwords do not match.");
+      return;
+    }
+    if (passwords.next.length < 6) {
+      setPwError("Password must be at least 6 characters.");
+      return;
+    }
+    setPwSaving(true);
+    try {
+      await changePassword({
+        currentPassword: passwords.current,
+        newPassword: passwords.next,
+      });
+      setPasswords({ current: "", next: "", confirm: "" });
+      setPwSuccess(true);
+      setTimeout(() => setPwSuccess(false), 3000);
+    } catch (err: unknown) {
+      const e = err as { response?: { data?: { message?: string } } };
+      setPwError(e.response?.data?.message || "Failed to update password");
+    } finally {
+      setPwSaving(false);
     }
   };
 
@@ -454,16 +503,26 @@ export default function Settings() {
                   className="w-full border border-brand-card-border rounded-[10px] px-3.5 py-3 text-[14px] text-gray-text outline-none focus:ring-2 focus:ring-brand-dark/20 placeholder-gray-placeholder"
                 />
               </div>
+              {pwError && (
+                <p className="text-[13px] text-red-600">{pwError}</p>
+              )}
+              {pwSuccess && (
+                <p className="text-[13px] text-brand-dark font-medium">
+                  Password updated successfully.
+                </p>
+              )}
               <div className="flex justify-end">
                 <button
+                  onClick={handlePasswordChange}
                   disabled={
+                    pwSaving ||
                     !passwords.current ||
                     !passwords.next ||
                     passwords.next !== passwords.confirm
                   }
                   className="px-6 py-2.5 rounded-[10px] bg-brand-dark text-white text-[14px] font-semibold hover:bg-green-800 transition-colors disabled:opacity-40"
                 >
-                  Update Password
+                  {pwSaving ? "Updating..." : "Update Password"}
                 </button>
               </div>
             </div>
